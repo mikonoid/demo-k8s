@@ -1,0 +1,99 @@
+---
+- hosts: all
+  become: true
+  tasks:
+
+  - name: install python
+    raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
+
+  - name: Update all packages in Debian-based machines
+    become: true
+    apt:
+      upgrade: yes
+      update_cache: yes
+      cache_valid_time: 86400 #One day
+
+  - name: Install software (Debian-based OS)
+    apt:
+      name: "{{ item }}"
+      state: present
+      update_cache: yes
+    with_items:
+          - htop
+          - sysstat
+          - atop
+          - vim
+          - wget
+          - curl
+          - apt-transport-https
+          - conntrack
+          - socat
+
+  - name: get kubectl
+    shell: "curl -LO https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl"
+
+  - name: kubectl permissions and moving
+    shell: "chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl"
+
+  - name: Add Docker GPG apt Key
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: Add Docker Repository
+    apt_repository:
+      repo: deb https://download.docker.com/linux/ubuntu xenial stable
+      state: present
+
+  - name: Update apt and install docker-ce
+    apt: update_cache=yes name=docker-ce state=latest
+
+  - name: get minikube
+    shell: "wget https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 &&
+            cp minikube-linux-amd64 /usr/local/bin/minikube && chmod 755 /usr/local/bin/minikube"
+
+
+  - name: minikube start
+    shell: "minikube start --driver=none"
+
+  - name: get kubectl config
+    shell: "cat /etc/kubernetes/admin.conf"
+    register: minikube_config
+
+  - name: debug config
+    debug:
+      var: minikube_config
+
+  - name: Create namespace for Argo
+    shell: "kubectl create namespace argocd"
+    run_once: yes
+
+  - name: Install ArgoCD
+    shell: "kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml && sleep 120"
+
+
+  - name: Get ArgoCD password
+    shell: "kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o name | cut -d'/' -f 2"
+    register: argocd_pass
+
+  - name: debug ArgoCD pass
+    debug:
+      var: argocd_pass.stdout
+
+  - name: install argocd cli
+    shell: "wget https://github.com/argoproj/argo-cd/releases/download/v1.6.1/argocd-linux-amd64 &&
+            mv argocd-linux-amd64 argocd && mv argocd /usr/local/bin &&
+            chmod +x /usr/local/bin/argocd"
+
+  - name: Port-Forward for argocd
+    shell: "kubectl port-forward svc/argocd-server -n argocd 8080:443 &"
+    async: 1000
+    poll: 0
+
+
+  - name: ArgoCD login and deploy Demo-app
+    shell: "argocd login localhost:8080 --username admin --password {{ argocd_pass.stdout }} --insecure &&
+            argocd app create demo-app --repo https://github.com/mikonoid/demo-app.git --path . --dest-server https://kubernetes.default.svc --dest-namespace default &&
+            argocd app set demo-app  --sync-policy automated"
+    environment:
+      ARGOCD_OPTS: "--port-forward-namespace argocd"

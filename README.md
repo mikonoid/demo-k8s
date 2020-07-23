@@ -11,6 +11,11 @@ Provisioning and rollout  - Ansible playbook
 CI - Github Actions
 CD - ArgoCD
 
+## Prerequisites
+
+* Git
+* Vagrant 
+
 ## Set up
 
 ```vagrant up```

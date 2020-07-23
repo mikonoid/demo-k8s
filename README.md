@@ -7,9 +7,9 @@ Vagrant+Minikube+ArgoCD
 This setup provides Kubernetes cluster on a single node (Minikube) with ArgoCD deployment
 for application https://github.com/mikonoid/demo-app
 
-Provisioning and rollout  - Ansible playbook
-CI - Github Actions
-CD - ArgoCD
+* Provisioning and rollout  - Ansible playbook
+* CI - Github Actions
+* CD - ArgoCD
 
 ## Prerequisites
 
